@@ -18,12 +18,8 @@ class EEP(object):
         self.telegrams = {}
 
         try:
-            if version_info[0] > 2:
-                with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'EEP.xml'), 'r', encoding='UTF-8') as xml_file:
-                    self.soup = BeautifulSoup(xml_file.read(), "html.parser")
-            else:
-                with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'EEP.xml'), 'r') as xml_file:
-                    self.soup = BeautifulSoup(xml_file.read(), "html.parser")
+            with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'EEP.xml'), 'r', encoding='UTF-8') as xml_file:
+                    self.soup = BeautifulSoup(xml_file.read(), "xml")
             self.init_ok = True
             self.__load_xml()
         except IOError:
@@ -46,10 +42,8 @@ class EEP(object):
         }
 
     @staticmethod
-    def _get_raw(source, bitarray):
+    def _get_raw(offset, size, bitarray):
         ''' Get raw data as integer, based on offset and size '''
-        offset = int(source['offset'])
-        size = int(source['size'])
         return int(''.join(['1' if digit else '0' for digit in bitarray[offset:offset + size]]), 2)
 
     @staticmethod
@@ -69,7 +63,7 @@ class EEP(object):
 
     def _get_value(self, source, bitarray):
         ''' Get value, based on the data in XML '''
-        raw_value = self._get_raw(source, bitarray)
+        raw_value = self._get_raw(int(source['offset']),int(source['size']), bitarray)
 
         rng = source.find('range')
         rng_min = float(rng.find('min').text)
@@ -90,7 +84,7 @@ class EEP(object):
 
     def _get_enum(self, source, bitarray):
         ''' Get enum value, based on the data in XML '''
-        raw_value = self._get_raw(source, bitarray)
+        raw_value = self._get_raw(int(source['offset']),int(source['size']), bitarray)
 
         # Find value description.
         value_desc = source.find('item', {'value': str(raw_value)}) or self._get_rangeitem(source, raw_value)
@@ -106,7 +100,7 @@ class EEP(object):
 
     def _get_boolean(self, source, bitarray):
         ''' Get boolean value, based on the data in XML '''
-        raw_value = self._get_raw(source, bitarray)
+        raw_value = self._get_raw(int(source['offset']),int(source['size']), bitarray)
         return {
             source['shortcut']: {
                 'description': source.get('description'),
@@ -159,18 +153,29 @@ class EEP(object):
             return None
 
         if eep_rorg not in self.telegrams.keys():
-            self.logger.warn('Cannot find rorg in EEP!')
+            self.logger.warn('Cannot find rorg "%s" in EEP!' % eep_rorg)
             return None
 
         if rorg_func not in self.telegrams[eep_rorg].keys():
-            self.logger.warn('Cannot find func in EEP!')
+            self.logger.warn('Cannot find func "%s" in EEP!' % rorg_func)
             return None
 
         if rorg_type not in self.telegrams[eep_rorg][rorg_func].keys():
-            self.logger.warn('Cannot find type in EEP!')
+            self.logger.warn('Cannot find type "%s" in EEP!' % rorg_type)
             return None
 
         profile = self.telegrams[eep_rorg][rorg_func][rorg_type]
+
+        #auto discovery command here
+        if not command:
+            #search for command list in profile
+            cmd_desc = profile.find('command')
+            if cmd_desc:
+                #extract command id for bitarray
+                offset = int(cmd_desc.get('offset'))
+                size = int(cmd_desc.get('size'))
+                command = self._get_raw(offset, size, bitarray)
+                self.logger.debug("auto detect command as %s" % command)
 
         if command:
             # multiple commands can be defined, with the command id always in same location (per RORG-FUNC-TYPE).

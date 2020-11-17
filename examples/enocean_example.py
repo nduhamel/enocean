@@ -14,16 +14,24 @@ except ImportError:
     import Queue as queue
 
 
-def assemble_radio_packet(transmitter_id):
-    return RadioPacket.create(rorg=RORG.BS4, rorg_func=0x20, rorg_type=0x01,
-                              sender=transmitter_id,
-                              CV=50,
-                              TMP=21.5,
-                              ES='true')
+# def assemble_radio_packet(transmitter_id):
+#     return RadioPacket.create(rorg=RORG.BS4, rorg_func=0x20, rorg_type=0x01,
+#                               sender=transmitter_id,
+#                               CV=50,
+#                               TMP=21.5,
+#                               ES='true')
 
+def assemble_radio_packet(transmitter_id):
+    # print(transmitter_id)
+    # print(enocean.utils.from_hex_string('05:0F:11:A3'))
+    return RadioPacket.create(rorg=RORG.VLD, rorg_func=0x01, rorg_type=0x0B,
+                              sender=transmitter_id,
+                              destination=enocean.utils.from_hex_string('05:0F:11:A3'),
+                              command=1,
+                              OV=100)
 
 init_logging()
-communicator = SerialCommunicator()
+communicator = SerialCommunicator(port='/dev/ttyUSB0')
 communicator.start()
 print('The Base ID of your module is %s.' % enocean.utils.to_hex_string(communicator.base_id))
 
@@ -36,9 +44,12 @@ while communicator.is_alive():
     try:
         # Loop to empty the queue...
         packet = communicator.receive.get(block=True, timeout=1)
+        print(packet)
         if packet.packet_type == PACKET.RADIO_ERP1 and packet.rorg == RORG.VLD:
-            packet.select_eep(0x05, 0x00)
+            packet.select_eep(0x01, 0x0B)
             packet.parse_eep()
+            print([hex(o) for o in packet.data])
+
             for k in packet.parsed:
                 print('%s: %s' % (k, packet.parsed[k]))
         if packet.packet_type == PACKET.RADIO_ERP1 and packet.rorg == RORG.BS4:
